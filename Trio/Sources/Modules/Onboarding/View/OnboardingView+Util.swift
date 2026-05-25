@@ -386,25 +386,42 @@ enum DeliveryLimitSubstep: Int, CaseIterable, Identifiable {
     func description(units: GlucoseUnits) -> any View {
         switch self {
         case .maxIOB:
-            return VStack(alignment: .leading, spacing: 8) {
-                Text(
-                    "Note: This setting must be greater than 0 for any automatic insulin dosing by Trio."
-                ).bold().foregroundStyle(Color.orange)
+            return VStack(alignment: .leading, spacing: 10) {
+                Text("Default: 0 units").bold()
 
                 Text(
-                    "This setting helps prevent delivering too much insulin at once. It’s typically a value close to the amount you might need for a very high blood sugar and the biggest meal of your life combined."
+                    "Note: This setting must be greater than 0 for any automatic insulin dosing by Trio (unless you currently have negative IOB)."
+                )
+                .bold()
+                .foregroundStyle(Color.orange)
+
+                Text(
+                    "Choose a value that covers your highest insulin needs — think about a correction for a very high glucose reading plus your biggest meal bolus. This gives Trio room to work while keeping you safe."
                 )
 
                 Text(
-                    "This is the maximum amount of Insulin On Board (IOB) above profile basal rates from all sources - positive temporary basal rates, manual or meal boluses, and SMBs - that Trio is allowed to accumulate to address an above target glucose."
+                    "Max IOB sets a safety limit on how much insulin Trio can automatically deliver above your scheduled basal rates. This prevents the system from giving too much insulin at once."
                 )
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Trio calculates your current Insulin On Board (IOB) from:")
+                    Text("• Boluses (including SMBs)")
+                    Text("• Temporary Basal Rates (TBRs)")
+                    Text("  ◦ A TBR higher than your scheduled rate will increase IOB")
+                    Text("  ◦ A TBR lower than your scheduled rate will decrease IOB")
+                }
+
                 Text(
-                    "If a calculated amount exceeds this limit, the suggested and / or delivered amount will be reduced so that active insulin on board (IOB) will not exceed this safety limit."
+                    "If delivering more insulin would push your IOB above this limit, Trio will reduce or skip the dose to stay within the safety boundary. This applies to SMBs, TBRs, and the recommendation from the bolus calculator."
                 )
-                Text(
-                    "Note: You can still manually bolus above this limit, but the suggested bolus amount will never exceed this in the bolus calculator."
-                )
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("What's NOT limited:")
+                    Text("• Manual boluses you enter yourself")
+                    Text("• Manual temporary basal rates you set yourself")
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
         case .maxBolus:
             return VStack(alignment: .leading, spacing: 8) {
                 Text(
@@ -466,18 +483,62 @@ enum DeliveryLimitSubstep: Int, CaseIterable, Identifiable {
     }
 }
 
+/// Three-state diagnostics-sharing consent.
+///
+/// Maps to a pair of independent `Bool?` flags in `PropertyPersistentFlags`:
+/// `diagnosticsSharingEnabled` (Crashlytics) and `telemetryEnabled` (the
+/// anonymous-usage POST). See `TelemetryClient`.
 enum DiagnosticsSharingOption: String, Equatable, CaseIterable, Identifiable {
-    case enabled
+    case full
+    case crashOnly
     case disabled
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .enabled:
-            return String(localized: "Enable Sharing")
+        case .full:
+            return String(localized: "Enable Full Sharing")
+        case .crashOnly:
+            return String(localized: "Crash Reports Only")
         case .disabled:
             return String(localized: "Disable Sharing")
+        }
+    }
+
+    var caption: String {
+        switch self {
+        case .full:
+            return String(localized: "Share anonymous crash reports + usage data.")
+        case .crashOnly:
+            return String(localized: "Share only crash reports — no usage data.")
+        case .disabled:
+            return String(localized: "Do not share any diagnostic data.")
+        }
+    }
+
+    var crashlyticsEnabled: Bool {
+        switch self {
+        case .crashOnly,
+             .full: return true
+        case .disabled: return false
+        }
+    }
+
+    var telemetryEnabled: Bool {
+        switch self {
+        case .full: return true
+        case .crashOnly,
+             .disabled: return false
+        }
+    }
+
+    init(crashlyticsEnabled: Bool, telemetryEnabled: Bool) {
+        switch (crashlyticsEnabled, telemetryEnabled) {
+        case (true, true): self = .full
+        case (true, false): self = .crashOnly
+        case (false, true): self = .full // unreachable in normal flow
+        case (false, false): self = .disabled
         }
     }
 }
@@ -487,6 +548,7 @@ enum PumpOptionForOnboardingUnits: String, Equatable, CaseIterable, Identifiable
     case omnipodEros
     case omnipodDash
     case dana
+    case medtrum
 
     var id: String { rawValue }
 
@@ -500,6 +562,8 @@ enum PumpOptionForOnboardingUnits: String, Equatable, CaseIterable, Identifiable
             return "Omnipod DASH"
         case .dana:
             return "Dana (RS/-i)"
+        case .medtrum:
+            return "Medtrum Nano"
         }
     }
 }
@@ -545,6 +609,8 @@ enum NightscoutImportOption: String, Equatable, CaseIterable, Identifiable {
 enum NightscoutSubstep: Int, CaseIterable, Identifiable {
     case setupSelection
     case connectToNightscout
+    case uploadToNightscout
+    case uploadGlucoseToNightscout
     case importFromNightscout
 
     var id: Int { rawValue }

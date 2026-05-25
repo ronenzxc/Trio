@@ -40,6 +40,29 @@ func info(
     }.perform()
 }
 
+func info(
+    _ category: Logger.Category,
+    _ message: String,
+    notificationText: String,
+    type: MessageType = .info,
+    file: String = #file,
+    function: String = #function,
+    line: UInt = #line
+) {
+    DispatchWorkItem(qos: .background, flags: .enforceQoS) {
+        loggerLock.perform {
+            category.logger.info(
+                message,
+                notificationText: notificationText,
+                type: type,
+                file: file,
+                function: function,
+                line: line
+            )
+        }
+    }.perform()
+}
+
 func warning(
     _ category: Logger.Category,
     _ message: String,
@@ -117,6 +140,7 @@ final class Logger {
     static let watchManager = Logger(category: .watchManager, reporter: baseReporter)
     static let coreData = Logger(category: .coreData, reporter: baseReporter)
     static let storage = Logger(category: .storage, reporter: baseReporter)
+    static let telemetry = Logger(category: .telemetry, reporter: baseReporter)
 
     enum Category: String {
         case `default`
@@ -131,6 +155,7 @@ final class Logger {
         case watchManager
         case coreData
         case storage
+        case telemetry
 
         var name: String {
             rawValue.capitalizingFirstLetter()
@@ -150,6 +175,7 @@ final class Logger {
             case .watchManager: return .watchManager
             case .coreData: return .coreData
             case .storage: return .storage
+            case .telemetry: return .telemetry
             }
         }
 
@@ -167,6 +193,7 @@ final class Logger {
                  .remoteControl,
                  .service,
                  .storage,
+                 .telemetry,
                  .watchManager:
                 return OSLog(subsystem: subsystem, category: name)
             }
@@ -246,11 +273,22 @@ final class Logger {
         function: String = #function,
         line: UInt = #line
     ) {
+        info(message, notificationText: message, type: type, file: file, function: function, line: line)
+    }
+
+    func info(
+        _ message: String,
+        notificationText: String,
+        type: MessageType = .info,
+        file: String = #file,
+        function: String = #function,
+        line: UInt = #line
+    ) {
         let printedMessage = "INFO: \(message)"
         os_log("%@ - %@ - %d %{public}@", log: log, type: .info, file.file, function, line, printedMessage)
         reporter.log(category.name, printedMessage, file: file, function: function, line: line)
 
-        showAlert(message, type: type)
+        showAlert(notificationText, type: type)
     }
 
     func warning(

@@ -9,6 +9,8 @@ extension Settings {
         var latestVersion: String?
         var isUpdateAvailable: Bool
         var isBlacklisted: Bool
+        var latestDevVersion: String?
+        var isDevUpdateAvailable: Bool
     }
 
     struct RootView: BaseView {
@@ -27,25 +29,29 @@ extension Settings {
         @State private var versionInfo = VersionInfo(
             latestVersion: nil,
             isUpdateAvailable: false,
-            isBlacklisted: false
+            isBlacklisted: false,
+            latestDevVersion: nil,
+            isDevUpdateAvailable: false
         )
         @State private var closedLoopDisabled = true
 
         @Environment(\.colorScheme) var colorScheme
         @EnvironmentObject var appIcons: Icons
         @Environment(AppState.self) var appState
+        @Environment(SettingsSearchHighlight.self) var searchHighlight
 
         private var filteredItems: [FilteredSettingItem] {
             SettingItems.filteredItems(searchText: searchText)
         }
 
         @ViewBuilder var versionInfoView: some View {
-            let latestVersion = versionInfo.latestVersion
-            if let version = latestVersion {
-                let updateColor: Color = versionInfo.isUpdateAvailable ? .orange : .green
-                let versionIconName = versionInfo.isUpdateAvailable ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+            VStack(alignment: .leading, spacing: 4) {
+                // Main version info
+                if let version = versionInfo.latestVersion {
+                    let updateColor: Color = versionInfo.isUpdateAvailable ? .orange : .green
+                    let versionIconName = versionInfo
+                        .isUpdateAvailable ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
 
-                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Latest version: \(version)")
                             .font(.footnote)
@@ -62,11 +68,33 @@ extension Settings {
                                 .foregroundColor(.red)
                         }
                     }
+                } else {
+                    Text("Latest version: Fetching...")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                 }
-            } else {
-                Text("Latest version: Fetching...")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+
+                // Show latest dev version on any branch except main
+                let buildDetails = BuildDetails.shared
+                if buildDetails.trioBranch != "main" {
+                    if let devVersion = versionInfo.latestDevVersion {
+                        let devUpdateColor: Color = versionInfo.isDevUpdateAvailable ? .orange : .secondary
+                        let devVersionIconName = versionInfo.isDevUpdateAvailable ? "arrow.up.circle.fill" : "hammer.fill"
+
+                        HStack {
+                            Text("Latest dev: \(devVersion)")
+                                .font(.footnote)
+                                .foregroundColor(devUpdateColor)
+                            Image(systemName: devVersionIconName)
+                                .font(.footnote)
+                                .foregroundColor(devUpdateColor)
+                        }
+                    } else {
+                        Text("Latest dev: Fetching...")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
         }
 
@@ -240,21 +268,36 @@ extension Settings {
                         }
                     ).listRowBackground(Color.chart)
 
+                    Section(
+                        header: Text("Trio Backup"),
+                        content: {
+                            Text(String(
+                                localized: "Export Settings",
+                                comment: "Export Settings menu item in Trio Settings Root View"
+                            ))
+                                .navigationLink(to: .settingsExport, from: self)
+                        }
+                    ).listRowBackground(Color.chart)
+
                 } else {
                     Section(
                         header: Text("Search Results"),
                         content: {
                             if filteredItems.isNotEmpty {
                                 ForEach(filteredItems) { filteredItem in
-                                    VStack(alignment: .leading) {
-                                        Text(filteredItem.matchedContent.localized).bold()
-                                        if let path = filteredItem.settingItem.path {
-                                            Text(path.map(\.localized).joined(separator: " > "))
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
+                                    NavigationLink(value: SearchResultTarget(
+                                        screen: filteredItem.settingItem.view,
+                                        scrollLabel: filteredItem.scrollLabel.localized
+                                    )) {
+                                        VStack(alignment: .leading) {
+                                            Text(filteredItem.matchedContent.localized).bold()
+                                            if let path = filteredItem.settingItem.path {
+                                                Text(path.map(\.localized).joined(separator: " > "))
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
                                         }
-
-                                    }.navigationLink(to: filteredItem.settingItem.view, from: self)
+                                    }
                                 }
                             } else {
                                 Text("No settings matching your search query")
@@ -266,69 +309,6 @@ extension Settings {
                         }
                     ).listRowBackground(Color.chart)
                 }
-
-                // TODO: remove this more or less entirely; add build-time flag to enable Middleware; add settings export feature
-//                Section {
-//                    Toggle("Developer Options", isOn: $state.debugOptions)
-//                    if state.debugOptions {
-//                        Group {
-//                            HStack {
-//                                Text("NS Upload Profile and Settings")
-//                                Button("Upload") { state.uploadProfileAndSettings(true) }
-//                                    .frame(maxWidth: .infinity, alignment: .trailing)
-//                                    .buttonStyle(.borderedProminent)
-//                            }
-//                            // Commenting this out for now, as not needed and possibly dangerous for users to be able to nuke their pump pairing informations via the debug menu
-//                            // Leaving it in here, as it may be a handy functionality for further testing or developers.
-//                            // See https://github.com/nightscout/Trio/pull/277 for more information
-//                            //
-//                            //                            HStack {
-//                            //                                Text("Delete Stored Pump State Binary Files")
-//                            //                                Button("Delete") { state.resetLoopDocuments() }
-//                            //                                    .frame(maxWidth: .infinity, alignment: .trailing)
-//                            //                                    .buttonStyle(.borderedProminent)
-//                            //                            }
-//                        }
-//                        Group {
-//                            Text("Preferences")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.preferences), from: self)
-//                            Text("Pump Settings")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.settings), from: self)
-//                            Text("Autosense")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.autosense), from: self)
-//                            //                            Text("Pump History")
-//                            //                                .navigationLink(to: .configEditor(file: OpenAPS.Monitor.pumpHistory), from: self)
-//                            Text("Basal profile")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.basalProfile), from: self)
-//                    Text("Targets ranges")
-//                        .navigationLink(to: .configEditor(file: OpenAPS.Settings.bgTargets), from: self)
-//                            Text("Temp targets")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.tempTargets), from: self)
-//                        }
-//
-//                        Group {
-//                            Text("Pump profile")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.pumpProfile), from: self)
-//                            Text("Profile")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Settings.profile), from: self)
-//                            //                            Text("Carbs")
-//                            //                                .navigationLink(to: .configEditor(file: OpenAPS.Monitor.carbHistory), from: self)
-//                        }
-//
-//                        Group {
-//                            Text("Target presets")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Trio.tempTargetsPresets), from: self)
-//                            Text("Calibrations")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Trio.calibrations), from: self)
-//                            Text("Middleware")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Middleware.determineBasal), from: self)
-//                            //                            Text("Statistics")
-//                            //                                .navigationLink(to: .configEditor(file: OpenAPS.Monitor.statistics), from: self)
-//                            Text("Edit settings json")
-//                                .navigationLink(to: .configEditor(file: OpenAPS.Trio.settings), from: self)
-//                        }
-//                    }
-//                }.listRowBackground(Color.chart)
             }
             .scrollContentBackground(.hidden).background(appState.trioBackgroundColor(for: colorScheme))
             .sheet(isPresented: $shouldDisplayHint) {
@@ -364,16 +344,26 @@ extension Settings {
                 }
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+            .navigationDestination(for: SearchResultTarget.self) { target in
+                state.view(for: target.screen)
+                    .onAppear {
+                        searchHighlight.highlightedSetting = target.scrollLabel
+                    }
+            }
             .screenNavigation(self)
             .onAppear {
-                AppVersionChecker.shared.refreshVersionInfo { _, latestVersion, isNewer, isBlacklisted in
-                    let updateAvailable = isNewer
-                    DispatchQueue.main.async {
-                        versionInfo = VersionInfo(
-                            latestVersion: latestVersion,
-                            isUpdateAvailable: updateAvailable,
-                            isBlacklisted: isBlacklisted
-                        )
+                Task { @MainActor in
+                    let (_, latestVersion, isNewer, isBlacklisted) = await AppVersionChecker.shared.refreshVersionInfo()
+                    versionInfo.latestVersion = latestVersion
+                    versionInfo.isUpdateAvailable = isNewer
+                    versionInfo.isBlacklisted = isBlacklisted
+
+                    // Fetch dev version if not on main branch
+                    let buildDetails = BuildDetails.shared
+                    if buildDetails.trioBranch != "main" {
+                        let (devVersion, isDevNewer) = await AppVersionChecker.shared.checkForNewDevVersion()
+                        versionInfo.latestDevVersion = devVersion
+                        versionInfo.isDevUpdateAvailable = isDevNewer
                     }
                 }
             }

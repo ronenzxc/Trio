@@ -28,5 +28,7 @@ final class ServiceAssembly: Assembly {
                 LiveActivityManager(resolver: r)
             }
         }
+        container.register(IOBService.self) { r in BaseIOBService(resolver: r) }
+        container.register(BolusSafetyValidator.self) { r in BaseBolusSafetyValidator(resolver: r) }
     }
 }

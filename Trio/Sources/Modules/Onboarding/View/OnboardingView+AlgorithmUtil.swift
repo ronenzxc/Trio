@@ -121,8 +121,8 @@ enum AlgorithmSettingsSubstep: Int, CaseIterable, Identifiable {
         case .maxSMBMinutes: return String(localized: "Max SMB Basal Minutes", comment: "Max SMB Basal Minutes")
         case .maxUAMMinutes: return String(localized: "Max UAM Basal Minutes", comment: "Max UAM Basal Minutes")
         case .maxDeltaGlucoseThreshold: return String(
-                localized: "Max. Allowed Glucose Rise for SMB",
-                comment: "Max. Allowed Glucose Rise for SMB, formerly Max Delta-BG Threshold"
+                localized: "Max Allowed Glucose Rise for SMB",
+                comment: "Max Allowed Glucose Rise for SMB, formerly Max Delta-BG Threshold"
             )
         case .highTempTargetRaisesSensitivity: return String(
                 localized: "High Temp Target Raises Sensitivity",
@@ -356,7 +356,7 @@ enum AlgorithmSettingsSubstep: Int, CaseIterable, Identifiable {
             return VStack(alignment: .leading, spacing: 8) {
                 Text("Default: 20% increase").bold().foregroundStyle(Color.primary)
                 Text(
-                    "Maximum allowed positive percent change in glucose level to permit SMBs. If the difference in glucose is greater than this, Trio will disable SMBs."
+                    "Maximum allowed positive percent change in glucose level to permit SMBs. If the difference in glucose is greater than this, Trio will only adjust Temp Basal Rate and not deliver an SMB that loop cycle."
                 )
                 Text(
                     "This is a safety limitation to avoid high SMB doses when glucose is rising abnormally fast, such as after a meal or with a very jumpy CGM sensor."

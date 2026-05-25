@@ -20,6 +20,14 @@ class NightscoutAPI {
         static let timeout: TimeInterval = 60
     }
 
+    private let excludedEnteredBy: [String] = [
+        NightscoutTreatment.local,
+        "AndroidAPS",
+        "openaps://AndroidAPS",
+        "iAPS",
+        "loop://iPhone"
+    ]
+
     enum Error: LocalizedError {
         case badStatusCode
         case missingURL
@@ -98,23 +106,29 @@ extension NightscoutAPI {
         }
     }
 
+    private func makeNeQueryItems() -> [URLQueryItem] {
+        excludedEnteredBy.enumerated().map { idx, value in
+            URLQueryItem(
+                name: "find[$and][\(idx)][enteredBy][$ne]",
+                value: value
+            )
+        }
+    }
+
     func fetchCarbs(sinceDate: Date? = nil) async throws -> [CarbsEntry] {
         var components = URLComponents()
         components.scheme = url.scheme
         components.host = url.host
         components.port = url.port
         components.path = Config.treatmentsPath
-        components.queryItems = [
-            URLQueryItem(name: "find[carbs][$exists]", value: "true"),
-            URLQueryItem(
-                name: "find[enteredBy][$ne]",
-                value: CarbsEntry.local.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-            ),
-            URLQueryItem(
-                name: "find[enteredBy][$ne]",
-                value: NightscoutTreatment.local.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-            )
+
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "find[carbs][$exists]", value: "true")
         ]
+
+        items.append(contentsOf: makeNeQueryItems())
+        components.queryItems = items
+
         if let date = sinceDate {
             let dateItem = URLQueryItem(
                 name: "find[created_at][$gt]",
@@ -137,7 +151,6 @@ extension NightscoutAPI {
             guard let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) else {
                 throw URLError(.badServerResponse)
             }
-
             let carbs = try JSONCoding.decoder.decode([CarbsEntry].self, from: data)
             return carbs
         } catch {
@@ -175,14 +188,21 @@ extension NightscoutAPI {
         return
     }
 
-    func deleteManualGlucose(withId id: String) async throws {
+    func deleteGlucose(withId id: String, withDate date: Date) async throws {
         var components = URLComponents()
         components.scheme = url.scheme
         components.host = url.host
         components.port = url.port
-        components.path = Config.treatmentsPath
+        components.path = Config.uploadEntriesPath
         components.queryItems = [
-            URLQueryItem(name: "find[id][$eq]", value: id)
+            URLQueryItem(
+                name: "find[$or][0][id][$eq]",
+                value: id
+            ),
+            URLQueryItem(
+                name: "find[$or][1][dateString][$eq]",
+                value: Formatter.iso8601withFractionalSeconds.string(from: date)
+            )
         ]
 
         guard let url = components.url else {
@@ -203,8 +223,6 @@ extension NightscoutAPI {
         guard let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
-
-        debugPrint("Delete successful for ID \(id)")
     }
 
     func deleteInsulin(withId id: String) async throws {
@@ -243,18 +261,15 @@ extension NightscoutAPI {
         components.host = url.host
         components.port = url.port
         components.path = Config.treatmentsPath
-        components.queryItems = [
+
+        var items: [URLQueryItem] = [
             URLQueryItem(name: "find[eventType]", value: "Temporary+Target"),
-            URLQueryItem(
-                name: "find[enteredBy][$ne]",
-                value: TempTarget.local.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-            ),
-            URLQueryItem(
-                name: "find[enteredBy][$ne]",
-                value: NightscoutTreatment.local.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
-            ),
             URLQueryItem(name: "find[duration][$exists]", value: "true")
         ]
+
+        items.append(contentsOf: makeNeQueryItems())
+        components.queryItems = items
+
         if let date = sinceDate {
             let dateItem = URLQueryItem(
                 name: "find[created_at][$gt]",

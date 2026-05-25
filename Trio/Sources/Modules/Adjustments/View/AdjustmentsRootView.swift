@@ -21,6 +21,9 @@ extension Adjustments {
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
         @State var isEditingTT = false
+        @State var showCancelOverrideConfirmDialog = false
+        @State var showCancelTempTargetConfirmDialog = false
+        @State var pendingPresetActivation: PendingPresetActivation?
 
         private var shouldDisplayStickyOverrideStopButton: Bool {
             state.isOverrideEnabled && state.activeOverrideName.isNotEmpty
@@ -143,6 +146,51 @@ extension Adjustments {
                         EditTempTargetForm(tempTargetToEdit: tempTarget, state: state)
                     }
                 }
+                .confirmationDialog("Override to Stop", isPresented: $showCancelOverrideConfirmDialog) {
+                    Button("Stop", role: .destructive) {
+                        Task {
+                            // Save cancelled Override in OverrideRunStored Entity
+                            // Cancel ALL active Override
+                            await state.disableAllActiveOverrides(createOverrideRunEntry: true)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Stop the Override \"\(state.currentActiveOverride?.name ?? "")\"?")
+                }
+                .confirmationDialog("Temp Target to Stop", isPresented: $showCancelTempTargetConfirmDialog) {
+                    Button("Stop", role: .destructive) {
+                        Task {
+                            // Save cancelled Temp Targets in TempTargetRunStored Entity
+                            // Cancel ALL active Temp Targets
+                            await state.disableAllActiveTempTargets(createTempTargetRunEntry: true)
+                            // Update View
+                            state.updateLatestTempTargetConfiguration()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Stop the Temp Target \"\(state.currentActiveTempTarget?.name ?? "")\"?")
+                }
+                .confirmationDialog(
+                    "Activate Preset",
+                    isPresented: presetActivationConfirmationBinding
+                ) {
+                    Button("Activate") {
+                        if let activation = pendingPresetActivation {
+                            activatePreset(activation)
+                        }
+                    }
+
+                    Button("Cancel", role: .cancel) {
+                        state.shouldDisplayPresetStartConfirmDialog = false
+                        pendingPresetActivation = nil
+                    }
+                } message: {
+                    if let activation = pendingPresetActivation {
+                        Text(activation.confirmationMessage)
+                    }
+                }
             }).background(appState.trioBackgroundColor(for: colorScheme))
         }
 
@@ -224,11 +272,7 @@ extension Adjustments {
             switch state.selectedTab {
             case .overrides:
                 Button(action: {
-                    Task {
-                        // Save cancelled Override in OverrideRunStored Entity
-                        // Cancel ALL active Override
-                        await state.disableAllActiveOverrides(createOverrideRunEntry: true)
-                    }
+                    showCancelOverrideConfirmDialog = true
                 }, label: {
                     Text("Stop Override")
 
@@ -239,14 +283,7 @@ extension Adjustments {
                     .tint(.white)
             case .tempTargets:
                 Button(action: {
-                    Task {
-                        // Save cancelled Temp Targets in TempTargetRunStored Entity
-                        // Cancel ALL active Temp Targets
-                        await state.disableAllActiveTempTargets(createTempTargetRunEntry: true)
-
-                        // Update View
-                        state.updateLatestTempTargetConfiguration()
-                    }
+                    showCancelTempTargetConfirmDialog = true
                 }, label: {
                     Text("Stop Temp Target")
 
@@ -270,6 +307,96 @@ extension Adjustments {
                 return "\(minutes)m \(seconds)s"
             } else {
                 return "<1m"
+            }
+        }
+    }
+}
+
+// MARK: Preset Activation Handling
+
+extension Adjustments.RootView: View {
+    enum PendingPresetActivation {
+        case override(objectID: NSManagedObjectID, presetID: String?, name: String)
+        case tempTarget(objectID: NSManagedObjectID, presetID: String?, name: String)
+
+        var name: String {
+            switch self {
+            case let .override(_, _, name),
+                 let .tempTarget(_, _, name):
+                return name
+            }
+        }
+
+        var adjustmentType: String {
+            switch self {
+            case .override:
+                return String(localized: "Override")
+            case .tempTarget:
+                return String(localized: "Temp Target")
+            }
+        }
+
+        var confirmationMessage: String {
+            String(localized: "Start the \(adjustmentType) \"\(name)\"?", comment: "Confirmation message for starting a preset")
+        }
+    }
+
+    private var presetActivationConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                state.requireAdjustmentsConfirmation &&
+                    state.shouldDisplayPresetStartConfirmDialog &&
+                    pendingPresetActivation != nil
+            },
+            set: { isPresented in
+                if !isPresented {
+                    state.shouldDisplayPresetStartConfirmDialog = false
+                    pendingPresetActivation = nil
+                }
+            }
+        )
+    }
+
+    func requestPresetActivation(_ activation: PendingPresetActivation) {
+        if state.requireAdjustmentsConfirmation {
+            pendingPresetActivation = activation
+            state.shouldDisplayPresetStartConfirmDialog = true
+        } else {
+            activatePreset(activation)
+        }
+    }
+
+    func activatePreset(_ activation: PendingPresetActivation) {
+        Task {
+            switch activation {
+            case let .override(objectID, presetID, _):
+                await state.enactOverridePreset(withID: objectID)
+
+                await MainActor.run {
+                    state.hideModal()
+                    selectedOverridePresetID = presetID
+                    showOverrideCheckmark = true
+                    state.shouldDisplayPresetStartConfirmDialog = false
+                    pendingPresetActivation = nil
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    showOverrideCheckmark = false
+                }
+
+            case let .tempTarget(objectID, presetID, _):
+                await state.enactTempTargetPreset(withID: objectID)
+
+                await MainActor.run {
+                    selectedTempTargetPresetID = presetID
+                    showTempTargetCheckmark = true
+                    state.shouldDisplayPresetStartConfirmDialog = false
+                    pendingPresetActivation = nil
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    showTempTargetCheckmark = false
+                }
             }
         }
     }

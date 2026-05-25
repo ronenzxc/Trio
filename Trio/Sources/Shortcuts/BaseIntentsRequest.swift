@@ -15,6 +15,9 @@ import Swinject
     @Injected() var apsManager: APSManager!
     @Injected() var overrideStorage: OverrideStorage!
     @Injected() var liveActivityManager: LiveActivityManager!
+    @Injected() var pumpHistoryStorage: PumpHistoryStorage!
+    @Injected() var iobService: IOBService!
+    @Injected() var bolusSafetyValidator: BolusSafetyValidator!
 
     let resolver: Resolver
 

@@ -109,6 +109,7 @@ struct ContactImageDetailView: View {
 
                 // Font Settings Section
                 Section(header: Text("Font Settings")) {
+                    colorModePicker
                     fontSizePicker
                     if contactImageEntry.layout == .split {
                         secondaryFontSizePicker
@@ -164,7 +165,9 @@ struct ContactImageDetailView: View {
             Button(action: {
                 saveChanges()
             }, label: {
-                Text("Save").padding(10)
+                Text("Save")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(10)
             })
                 .frame(width: UIScreen.main.bounds.width * 0.9, alignment: .center)
                 .background(isUnchanged ? Color(.systemGray4) : Color(.systemBlue))
@@ -172,6 +175,14 @@ struct ContactImageDetailView: View {
                 .tint(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(5)
+        }
+    }
+
+    private var colorModePicker: some View {
+        Picker("Color Mode", selection: $contactImageEntry.colorMode) {
+            ForEach(ContactImageEntry.ColorMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
         }
     }
 

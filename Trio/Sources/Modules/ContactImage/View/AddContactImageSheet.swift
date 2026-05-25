@@ -16,6 +16,7 @@ struct AddContactImageSheet: View {
     @State private var top: ContactImageValue = .none
     @State private var bottom: ContactImageValue = .trend
     @State private var ring: ContactImageLargeRing = .none
+    @State private var colorMode: ContactImageEntry.ColorMode = .color
     @State private var fontSize: ContactImageEntry.FontSize = .regular
     @State private var secondaryFontSize: ContactImageEntry.FontSize = .small
     @State private var fontWeight: Font.Weight = .medium
@@ -34,6 +35,7 @@ struct AddContactImageSheet: View {
             hasHighContrast: hasHighContrast,
             ringWidth: ringWidth,
             ringGap: ringGap,
+            colorMode: colorMode,
             fontSize: fontSize,
             secondaryFontSize: secondaryFontSize,
             fontWeight: fontWeight,
@@ -136,6 +138,7 @@ struct AddContactImageSheet: View {
 
                     // Font Settings Section
                     Section(header: Text("Font Settings")) {
+                        colorModePicker
                         fontSizePicker
                         if layout == .split {
                             secondaryFontSizePicker
@@ -189,13 +192,23 @@ struct AddContactImageSheet: View {
             Button(action: {
                 saveNewEntry()
             }, label: {
-                Text("Save").padding(10)
+                Text("Save")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(10)
             })
                 .frame(width: UIScreen.main.bounds.width * 0.9, alignment: .center)
                 .background(Color(.systemBlue))
                 .tint(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(5)
+        }
+    }
+
+    private var colorModePicker: some View {
+        Picker("Color Mode", selection: $colorMode) {
+            ForEach(ContactImageEntry.ColorMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
         }
     }
 
